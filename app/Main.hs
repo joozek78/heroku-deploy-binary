@@ -20,6 +20,8 @@ import System.IO (hPutStrLn, stderr)
 import System.FilePath
 import System.Directory
 
+data Flags = Insecure | None deriving Eq
+
 data SlugInfo = SlugInfo {
   blob :: !BlobInfo,
   id :: !Text
@@ -32,16 +34,11 @@ data BlobInfo = BlobInfo {
 instance FromJSON SlugInfo
 instance FromJSON BlobInfo
 
-forceLeft :: Show e => Either e a -> a
-forceLeft (Right a) = a
-forceLeft (Left e) = error $ show e
-
 forceDecode :: FromJSON a => LB.ByteString -> a
 forceDecode s = case eitherDecode s of
                   Left e -> error $ printf "Could not decode '%s': %s" (B.unpack . LB.toStrict $ s) e
                   Right a -> a
 
-defCurlOpt = "-nsS" -- use netrc, be silent but show errors
 
 ensureProcessOk :: ProcessHandle -> String -> IO ()
 ensureProcessOk ph name = do
@@ -56,14 +53,18 @@ main :: IO ()
 main = do
   args <- getArgs
   case args of
-    [appName, execName] -> deploy appName execName
+    [appName, execName] -> deploy appName execName None
+    ["-k", appName, execName] -> deploy appName execName Insecure
     _ -> help
 
 help = do
   name <- getProgName
-  debugLn $ printf "usage: %s <heroku app name> <executable>" name
+  debugLn $ printf "usage: %s [-k] <heroku app name> <executable>" name
+  debugLn "-k: don't check ssl certificate when uploading slug (helps on windows)"
 
-deploy appName execName = do
+deploy appName execName flags = do
+  let baseCurlOpt = "-nsS" -- use netrc, be silent but show errors
+  let defCurlOpt = if flags == Insecure then baseCurlOpt ++ "k" else baseCurlOpt
   execExists <- doesFileExist execName
   unless execExists $ error $ printf "File %s does not exist!" execName
   debugLn $ printf "deploying executable '%s' to app %s" execName appName
@@ -72,24 +73,22 @@ deploy appName execName = do
                       args = ["-X", "POST",
                        "-H", "Content-Type: application/json",
                        "-H", "Accept: application/vnd.heroku+json; version=3",
-                       "-d", printf "{\"process_types\":{\"web\":\"./%s\"}}" execName,
+                       "-d", printf "{\"process_types\":{\"web\":\"./%s\"}}" $ takeFileName execName,
                        defCurlOpt,
                        printf "https://api.heroku.com/apps/%s/slugs" appName]
                    in readProcess binary args stdin)
   let !s@(SlugInfo (BlobInfo slugUrl) slugId) = forceDecode . LB.fromStrict . B.pack $ slugRespStr
-  print s
-  print "Uploading binary"
   print "Packing binary"
   withSystemTempDirectory "heroku-deploy-binary" $ \workDir -> do
     createDirectory $ workDir </> "app"
     copyFile execName $ workDir </> "app" </> (takeFileName execName)
-    (_, Just tarOut, _, tarHandle) <- createProcess $ (proc "tar" ["-cz", "app"]) { std_out = CreatePipe, cwd = Just workDir }
-    (_,_,_,uploadHandle) <- createProcess $ (proc "curl" ["-X", "PUT",
+    _ <- readCreateProcess (proc "tar" ["-cz", "app"]) { cwd = Just workDir } ""
+    print "Uploading binary"
+    callProcess "curl" ["-X", "PUT",
        "-H", "Content-Type:",
        "--data-binary", "@-",
        defCurlOpt,
-       T.unpack slugUrl]) { std_in = UseHandle tarOut }
-    sequence_ [ensureProcessOk tarHandle "tar", ensureProcessOk uploadHandle "curl"]
+       T.unpack slugUrl]
 
   print "Releasing slug"
   _ <- (let binary = "curl"
@@ -102,12 +101,3 @@ deploy appName execName = do
               printf "https://api.heroku.com/apps/%s/releases" appName]
          in readProcess binary args stdin)
   print "Done"
-
---
--- {"blob":{"method":"put","url":"https://s3-external-1.amazonaws.com/herokuslugs/heroku.com/v1/b9325f64-51df-44ab-8281-7278a2607465?AWSAccessKeyId=AKIAJWLOWWHPBWQOPJZQ&Signature=EufM%2F1yoC2E5YC4ux6XcWq8mIE8%3D&Expires=1438020738"}
--- ,"buildpack_provided_description":null,"commit":null,"commit_description":null,"created_at":"2015-07-27T17:12:18Z",
--- "id":"b9325f64-51df-44ab-8281-7278a2607465",
--- "process_types":{"web":"greenticket"},"size":null,"updated_at":"2015-07-27T17:12:18Z","stack":{"id":"f9f9cbd7-2970-41ef-8db5-3df7123b041f","name":"cedar-14"}}
---
--- --
--- curl -X PUT \
