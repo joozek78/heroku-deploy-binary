@@ -1,0 +1,6 @@
+before_install:
+  - curl -Ls https://github.com/commercialhaskell/stack/releases/download/v0.1.2.0/stack-0.1.2.0-x86_64-linux.gz  | gunzip >stack
+  - chmod +x stack
+script:
+  - ./stack setup
+  - ./stack build
