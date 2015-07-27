@@ -1,0 +1,32 @@
+name:                heroku-deploy-binary
+version:             0.1.0.0
+synopsis:            Deploy binary executable to heroku
+description:         Please see README.md
+homepage:            https://github.com/joozek78/heroku-deploy-binary
+license:             MIT
+license-file:        LICENSE
+author:              Marcin Goliński
+maintainer:          mj.golinski@gmail.com
+-- copyright:
+category:            Deployment
+build-type:          Simple
+-- extra-source-files:
+cabal-version:       >=1.10
+
+executable heroku-deploy-binary
+  hs-source-dirs:      app
+  main-is:             Main.hs
+  ghc-options:         -threaded -rtsopts -with-rtsopts=-N
+  build-depends:       base,
+                       aeson,
+                       process,
+                       text,
+                       bytestring,
+                       directory,
+                       filepath,
+                       temporary
+  default-language:    Haskell2010
+
+source-repository head
+  type:     git
+  location: https://github.com/joozek78/heroku-deploy-binary
