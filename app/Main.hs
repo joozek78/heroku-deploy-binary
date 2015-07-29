@@ -101,7 +101,7 @@ uploadSlug defCurlOpt slugUrl execName appName = do
     createDirectory $ workDir </> "app"
     copyFile execName $ workDir </> "app" </> (takeFileName execName)
     let tgzFileName = workDir </> "slug.tgz"
-    _ <- readCreateProcess (proc "tar" ["-cz", "app", "-f", tgzFileName]) { cwd = Just workDir } ""
+    _ <- readCreateProcess (proc "tar" ["-cz", "./app", "-f", tgzFileName]) { cwd = Just workDir } ""
     print "Uploading binary"
     callProcess "curl" ["-X", "PUT",
        "-H", "Content-Type:",
