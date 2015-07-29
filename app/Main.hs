@@ -19,6 +19,7 @@ import System.IO.Temp
 import System.IO (hPutStrLn, stderr)
 import System.FilePath
 import System.Directory
+import Data.Monoid
 
 data Flags = Insecure | None deriving Eq
 
@@ -33,6 +34,8 @@ data BlobInfo = BlobInfo {
 
 instance FromJSON SlugInfo
 instance FromJSON BlobInfo
+
+type CurlOpt = String
 
 forceDecode :: FromJSON a => LB.ByteString -> a
 forceDecode s = case eitherDecode s of
@@ -65,9 +68,21 @@ help = do
 deploy appName execName flags = do
   let baseCurlOpt = "-nsS" -- use netrc, be silent but show errors
   let defCurlOpt = if flags == Insecure then baseCurlOpt ++ "k" else baseCurlOpt
-  execExists <- doesFileExist execName
-  unless execExists $ error $ printf "File %s does not exist!" execName
+  validateArgs
+
   debugLn $ printf "deploying executable '%s' to app %s" execName appName
+  !s@(SlugInfo (BlobInfo slugUrl) slugId) <- createSlug defCurlOpt execName appName
+  print $ "created slug: " ++ show s
+  uploadSlug defCurlOpt slugUrl execName appName
+  releaseSlug defCurlOpt slugId appName
+  print "Done"
+  where
+    validateArgs = do
+      execExists <- doesFileExist execName
+      unless execExists $ error $ printf "File %s does not exist!" execName
+
+createSlug :: CurlOpt -> String -> String -> IO SlugInfo
+createSlug defCurlOpt execName appName = do
   slugRespStr <- (let binary = "curl"
                       stdin = ""
                       args = ["-X", "POST",
@@ -77,20 +92,27 @@ deploy appName execName flags = do
                        defCurlOpt,
                        printf "https://api.heroku.com/apps/%s/slugs" appName]
                    in readProcess binary args stdin)
-  let !s@(SlugInfo (BlobInfo slugUrl) slugId) = forceDecode . LB.fromStrict . B.pack $ slugRespStr
-  print "Packing binary"
+  return . forceDecode . LB.fromStrict . B.pack $ slugRespStr
+
+uploadSlug :: CurlOpt -> Text -> String -> String -> IO ()
+uploadSlug defCurlOpt slugUrl execName appName = do
+  print $ "Packing binary " <> execName
   withSystemTempDirectory "heroku-deploy-binary" $ \workDir -> do
     createDirectory $ workDir </> "app"
     copyFile execName $ workDir </> "app" </> (takeFileName execName)
-    _ <- readCreateProcess (proc "tar" ["-cz", "app"]) { cwd = Just workDir } ""
+    let tgzFileName = workDir </> "slug.tgz"
+    _ <- readCreateProcess (proc "tar" ["-cz", "app", "-f", tgzFileName]) { cwd = Just workDir } ""
     print "Uploading binary"
     callProcess "curl" ["-X", "PUT",
        "-H", "Content-Type:",
-       "--data-binary", "@-",
+       "--data-binary", "@" ++ tgzFileName,
        defCurlOpt,
        T.unpack slugUrl]
+    print "Binary uploaded"
 
-  print "Releasing slug"
+releaseSlug :: CurlOpt -> Text -> String -> IO ()
+releaseSlug defCurlOpt slugId appName = do
+  print $ "Releasing slug " <> T.unpack slugId
   _ <- (let binary = "curl"
             stdin = ""
             args = ["-X", "POST",
@@ -100,4 +122,4 @@ deploy appName execName flags = do
               defCurlOpt,
               printf "https://api.heroku.com/apps/%s/releases" appName]
          in readProcess binary args stdin)
-  print "Done"
+  print "Slug released"
