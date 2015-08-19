@@ -1,19 +1,26 @@
 language: haskell
-
 sudo: false
 cache:
   directories:
   - $HOME/.stack/
-
 before_install:
 - mkdir -p ~/.local/bin
 - export PATH=~/.local/bin:$PATH
-- travis_retry curl -L https://github.com/commercialhaskell/stack/releases/download/v0.1.1.0/stack-0.1.1.0-x86_64-linux.gz | gunzip > ~/.local/bin/stack
+- travis_retry curl -L https://github.com/commercialhaskell/stack/releases/download/v0.1.3.1/stack-0.1.3.1-x86_64-linux.gz
+  | gunzip > ~/.local/bin/stack
 - chmod a+x ~/.local/bin/stack
-
 install:
-  - stack setup --no-terminal
-  - stack build --only-snapshot --no-terminal
-
+- stack setup --no-terminal
+- stack build --only-snapshot --no-terminal
 script:
-  - stack build --no-terminal
+- stack build --no-terminal
+- mkdir dist/
+- stack --local-bin-path dist/ install
+before_deploy: cp dist/heroku-deploy-binary dist/heroku-deploy-binary-linux-x86_64
+deploy:
+  provider: releases
+  api_key:
+    secure: XljQNaeOkwOJmWCRV8tJHmBeXTfyfdJmQX/Eecl7rXsXM8Pe/9w34YCHefOtjJELLko+HSXYpL0G8/680q88BK8/J2nZ9oS1Qv1Rx9bAzHNaXCZgI8M0XoDx7Drc9KgfC62UmpNJmRXOlvQfJ1Ke9a/q+VpIOZMfXmBnUvhFNHW3TbUOciRU7uCsH7BKrauuxdAnWpWwOwQUqN/9QNk/B+PSdUtgvoxDPn9mY6oYgemY6BXUaQCHWV7rmIKQRpeflaSROG/AflxlA/WEgExXApL/GFvMPHOVekBK+pPAOlad9/Ep7oVgINMItkzF9EeD+P7RiLxr9EssuZonZlUHBTccQ+PsaoouW1DgC9Z0fyxSyFdcWdeMyy9nbD8WededEZiXyrQiMja7sAb2sdbNGLKwCXYoOHy6650MLAzmD+1JNqtTHYAt4uGQVX6oVAtZmpB4oFG9pYW3fnCQHTY8gL2+bs2B4nI63t8orA1Ylvb5th1vz5jxIKFrsmyJcqaPXOdl3DDNqnLAc0cMZdWacvY/NXRj4UUFvmcOtXoHk1A+6WNw1hr5SVRRoGtUN+ABpBL0U5gLEcbu479gPc0dnAsnzLIXcJy860JeDZvE2o3XTA37P7PMHm9Evw3tCvsXIeqiJ5uLLt/109wN/Ogj+TVB3bk9cyfTHiFmL6VBS4I=
+  file: dist/heroku-deploy-binary-linux-x86_64
+  on:
+    tags: true
