@@ -62,7 +62,8 @@ main = do
     main' ("-k":args) _ t = main' args Insecure t
     main' ("-t":token:args) f _ = main' args f $ Just token
     main' [appName, execName] f t = deploy appName execName f t
-    main' _ _ _ = help
+    main' ["-h"] _ _ = help
+    main' _ _ _ = help >> exitFailure
 
 help = do
   name <- getProgName
