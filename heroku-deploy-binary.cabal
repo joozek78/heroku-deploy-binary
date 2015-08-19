@@ -1,5 +1,5 @@
 name:                heroku-deploy-binary
-version:             0.1.0.0
+version:             0.2.0.0
 synopsis:            Deploy binary executable to heroku
 description:         Please see README.md
 homepage:            https://github.com/joozek78/heroku-deploy-binary
